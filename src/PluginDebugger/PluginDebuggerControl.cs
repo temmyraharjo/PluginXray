@@ -105,9 +105,15 @@ namespace PluginDebugger
 
         public override void UpdateConnection(IOrganizationService newService, ConnectionDetail detail, string actionName, object parameter)
         {
+            // Build connection-derived state BEFORE base runs. When a connection-requiring control
+            // was used while disconnected, ExecuteMethod queued its action and base.UpdateConnection
+            // replays it here — the replay must already see a ready metadata cache and editor
+            // context, so establish them first (using newService, since Service isn't set yet).
+            _metadata = newService != null ? new MetadataCache(newService) : null;
+            SetEditorContext(newService);
+
             base.UpdateConnection(newService, detail, actionName, parameter);
-            _metadata = Service != null ? new MetadataCache(Service) : null;
-            UpdateEditorContext();
+
             UpdateBanner();
             LoadConnectionDefaults();
             LoadTables();
@@ -157,11 +163,13 @@ namespace PluginDebugger
         }
 
         /// <summary>Pushes the current service, metadata cache and primary entity into the editors.</summary>
-        private void UpdateEditorContext()
+        private void UpdateEditorContext() => SetEditorContext(Service);
+
+        private void SetEditorContext(IOrganizationService service)
         {
             var entityName = SelectedEntityName();
-            _targetEditor?.SetContext(Service, _metadata, entityName);
-            _imageEditor?.SetContext(Service, _metadata, entityName);
+            _targetEditor?.SetContext(service, _metadata, entityName);
+            _imageEditor?.SetContext(service, _metadata, entityName);
         }
 
         /// <summary>The selected table's logical name (from the picked item, or free-typed text).</summary>
@@ -207,46 +215,42 @@ namespace PluginDebugger
         /// </summary>
         private TextBox BuildIdPickerRow(TableLayoutPanel layout, string label, string entityLogicalName)
         {
-            var panel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
-            var box = new TextBox { Width = 280 };
+            var box = new TextBox();
             var pick = new Button { Text = "…", AutoSize = true, Margin = new Padding(3, 1, 3, 1) };
-            var nameLabel = new Label { AutoSize = true, ForeColor = Color.Gray, Margin = new Padding(6, 8, 0, 0) };
+            var nameLabel = new Label { AutoSize = true, ForeColor = Color.Gray, Anchor = AnchorStyles.Left, Margin = new Padding(6, 8, 0, 0) };
             pick.Click += (s, e) => PickIdentity(entityLogicalName, box, nameLabel);
-            panel.Controls.Add(box);
-            panel.Controls.Add(pick);
-            panel.Controls.Add(nameLabel);
-            AddRow(layout, label, panel);
+            AddRow(layout, label, BuildStretchRow(box, pick, nameLabel));
             return box;
         }
 
         private void PickIdentity(string entityLogicalName, TextBox box, Label nameLabel)
         {
-            if (Service == null)
+            // Requires a live connection: ExecuteMethod runs this immediately when connected, or
+            // opens XrmToolBox's connection selection dialog and replays it once connected.
+            ExecuteMethod(() =>
             {
-                MessageBox.Show("Connect to an environment first.", "Pick record", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            if (_metadata == null)
-            {
-                _metadata = new MetadataCache(Service);
-            }
-
-            try
-            {
-                using (var picker = new RecordPickerDialog(Service, _metadata, entityLogicalName))
+                if (_metadata == null)
                 {
-                    if (picker.ShowDialog(this) == DialogResult.OK)
+                    _metadata = new MetadataCache(Service);
+                }
+
+                try
+                {
+                    using (var picker = new RecordPickerDialog(Service, _metadata, entityLogicalName))
                     {
-                        box.Text = picker.SelectedId.ToString();
-                        nameLabel.Text = picker.SelectedName;
+                        if (picker.ShowDialog(this) == DialogResult.OK)
+                        {
+                            box.Text = picker.SelectedId.ToString();
+                            nameLabel.Text = picker.SelectedName;
+                        }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this, $"Could not open the {entityLogicalName} picker: {ex.Message}",
-                    "Pick record", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, $"Could not open the {entityLogicalName} picker: {ex.Message}",
+                        "Pick record", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            });
         }
 
         /// <summary>A table choice: logical name plus display name for the picker.</summary>
@@ -390,27 +394,23 @@ namespace PluginDebugger
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
             // Assembly
-            var assemblyPanel = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = new Padding(0) };
-            _assemblyPathBox = new TextBox { Width = 250, ReadOnly = true };
+            _assemblyPathBox = new TextBox { ReadOnly = true };
             var browseButton = new Button { Text = "Browse…", AutoSize = true };
             browseButton.Click += OnBrowse;
             var loadTypesButton = new Button { Text = "Load types", AutoSize = true };
             loadTypesButton.Click += OnLoadTypes;
-            assemblyPanel.Controls.Add(_assemblyPathBox);
-            assemblyPanel.Controls.Add(browseButton);
-            assemblyPanel.Controls.Add(loadTypesButton);
-            AddRow(layout, "Plugin assembly", assemblyPanel);
+            AddRow(layout, "Plugin assembly", BuildStretchRow(_assemblyPathBox, browseButton, loadTypesButton));
 
             // Type — plugins and custom workflow activities (§4.12); selection reshapes the form.
-            _typeCombo = new ComboBox { Width = 360, DropDownStyle = ComboBoxStyle.DropDownList };
+            _typeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
             _typeCombo.SelectedIndexChanged += (s, e) => OnTypeChanged();
-            AddRow(layout, "Plugin / activity type", _typeCombo);
+            AddRow(layout, "Plugin / activity type", Stretch(_typeCombo));
 
             // Config
-            _unsecureBox = new TextBox { Width = 360 };
-            AddRow(layout, "Unsecure config", _unsecureBox);
-            _secureBox = new TextBox { Width = 360 };
-            AddRow(layout, "Secure config", _secureBox);
+            _unsecureBox = new TextBox();
+            AddRow(layout, "Unsecure config", Stretch(_unsecureBox));
+            _secureBox = new TextBox();
+            AddRow(layout, "Secure config", Stretch(_secureBox));
 
             // Message / Stage / Mode
             var messagePanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
@@ -432,10 +432,10 @@ namespace PluginDebugger
             _stageCombo.SelectedIndexChanged += (s, e) => ApplyFormShape();
             AddRow(layout, "Stage", _stageCombo);
 
-            _modeCombo = new ComboBox { Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
+            _modeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
             _modeCombo.Items.AddRange(new object[] { "Full real (default)", "Read-real / write-mock", "Full mock" });
             _modeCombo.SelectedIndex = 0;
-            AddRow(layout, "Execution mode", _modeCombo);
+            AddRow(layout, "Execution mode", Stretch(_modeCombo));
 
             // Full execution-context import (§4.11): paste a serialized IExecutionContext to hydrate
             // the whole form at once.
@@ -447,10 +447,8 @@ namespace PluginDebugger
 
             // Table picker (FR-2.1/2.3): the selected table IS the primary entity. Populated from
             // metadata on connect; supports type-to-filter. A free-typed logical name also works.
-            var tablePanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
             _tableCombo = new ComboBox
             {
-                Width = 240,
                 DropDownStyle = ComboBoxStyle.DropDown,
                 AutoCompleteMode = AutoCompleteMode.SuggestAppend,
                 AutoCompleteSource = AutoCompleteSource.ListItems,
@@ -460,32 +458,32 @@ namespace PluginDebugger
             _tableCombo.Leave += (s, e) => UpdateEditorContext();
             _hydrateButton = new Button { Text = "Hydrate from record…", AutoSize = true };
             _hydrateButton.Click += OnHydrate;
-            tablePanel.Controls.Add(_tableCombo);
-            tablePanel.Controls.Add(_hydrateButton);
-            AddRow(layout, "Table", tablePanel);
+            AddRow(layout, "Table", BuildStretchRow(_tableCombo, _hydrateButton));
 
             // Target — metadata-driven typed attribute editor (Create/Update)
-            _targetEditor = new TypedAttributeEditor { Width = 380, Height = 180, Margin = new Padding(3) };
-            AddRow(layout, "Target attributes", _targetEditor, out _targetGridLabel);
+            _targetEditor = new TypedAttributeEditor { Height = 180, Margin = new Padding(3) };
+            // Its Add/Edit need metadata: when disconnected, defer through the host's connection flow.
+            _targetEditor.RunWithConnection = action => ExecuteMethod(action);
+            AddRow(layout, "Target attributes", Stretch(_targetEditor), out _targetGridLabel);
 
             // Target id (Delete)
-            _targetIdBox = new TextBox { Width = 280 };
-            AddRow(layout, "Target record id", _targetIdBox, out _targetIdLabel);
+            _targetIdBox = new TextBox();
+            AddRow(layout, "Target record id", Stretch(_targetIdBox), out _targetIdLabel);
 
             // OutputParameters["id"] (Create / post-operation only)
-            _outputIdBox = new TextBox { Width = 280 };
-            AddRow(layout, "OutputParameters[\"id\"]", _outputIdBox, out _outputIdLabel);
+            _outputIdBox = new TextBox();
+            AddRow(layout, "OutputParameters[\"id\"]", Stretch(_outputIdBox), out _outputIdLabel);
 
             // Images — multiple pre/post images, each with the same typed editor (FR-5.4)
-            _imageEditor = new ImageListEditor { Width = 380, Height = 130, Margin = new Padding(3) };
-            AddRow(layout, "Images", _imageEditor, out _imageLabel);
+            _imageEditor = new ImageListEditor { Height = 130, Margin = new Padding(3) };
+            _imageEditor.RunWithConnection = action => ExecuteMethod(action);
+            AddRow(layout, "Images", Stretch(_imageEditor), out _imageLabel);
 
             // ----- Custom workflow activity (§4.12) — shown only when a code activity is selected -----
             AddSectionHeader(layout, "Workflow activity", out _workflowHeaderLabel, out _workflowHeaderFiller);
 
             _workflowArgsGrid = new DataGridView
             {
-                Width = 380,
                 Height = 150,
                 AllowUserToAddRows = false,
                 RowHeadersVisible = false,
@@ -495,23 +493,23 @@ namespace PluginDebugger
             _workflowArgsGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "dir", HeaderText = "Dir", ReadOnly = true, Width = 44 });
             _workflowArgsGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "type", HeaderText = "Type", ReadOnly = true });
             _workflowArgsGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "value", HeaderText = "Value" });
-            AddRow(layout, "Arguments", _workflowArgsGrid, out _workflowArgsLabel);
+            AddRow(layout, "Arguments", Stretch(_workflowArgsGrid), out _workflowArgsLabel);
 
-            _stageNameBox = new TextBox { Width = 200 };
-            AddRow(layout, "StageName", _stageNameBox, out _stageNameLabel);
+            _stageNameBox = new TextBox();
+            AddRow(layout, "StageName", Stretch(_stageNameBox), out _stageNameLabel);
 
-            _workflowModeCombo = new ComboBox { Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
+            _workflowModeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
             _workflowModeCombo.Items.AddRange(new object[] { "0 — Background (async)", "1 — Real-time (sync)" });
             _workflowModeCombo.SelectedIndex = 0;
-            AddRow(layout, "WorkflowMode", _workflowModeCombo, out _workflowModeLabel);
+            AddRow(layout, "WorkflowMode", Stretch(_workflowModeCombo), out _workflowModeLabel);
 
             // ----- Execution context (§4.4) -----
             AddSectionHeader(layout, "Execution context");
 
-            _contextModeCombo = new ComboBox { Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
+            _contextModeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
             _contextModeCombo.Items.AddRange(new object[] { "0 — Synchronous", "1 — Asynchronous" });
             _contextModeCombo.SelectedIndex = 0;
-            AddRow(layout, "Mode", _contextModeCombo);
+            AddRow(layout, "Mode", Stretch(_contextModeCombo));
 
             _depthBox = new TextBox { Width = 80, Text = "1" };
             AddRow(layout, "Depth", _depthBox);
@@ -522,17 +520,13 @@ namespace PluginDebugger
             _businessUnitIdBox = BuildIdPickerRow(layout, "BusinessUnitId", "businessunit");
             _organizationIdBox = BuildIdPickerRow(layout, "OrganizationId", "organization");
 
-            var correlationPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
-            _correlationIdBox = new TextBox { Width = 280, Text = Guid.NewGuid().ToString() };
+            _correlationIdBox = new TextBox { Text = Guid.NewGuid().ToString() };
             var newCorrelationButton = new Button { Text = "New", AutoSize = true };
             newCorrelationButton.Click += (s, e) => _correlationIdBox.Text = Guid.NewGuid().ToString();
-            correlationPanel.Controls.Add(_correlationIdBox);
-            correlationPanel.Controls.Add(newCorrelationButton);
-            AddRow(layout, "CorrelationId", correlationPanel);
+            AddRow(layout, "CorrelationId", BuildStretchRow(_correlationIdBox, newCorrelationButton));
 
             _sharedVarsGrid = new DataGridView
             {
-                Width = 380,
                 Height = 110,
                 AllowUserToAddRows = true,
                 RowHeadersVisible = false,
@@ -543,13 +537,12 @@ namespace PluginDebugger
             typeColumn.Items.AddRange(SharedVariableValue.TypeNames.Cast<object>().ToArray());
             _sharedVarsGrid.Columns.Add(typeColumn);
             _sharedVarsGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "value", HeaderText = "Value" });
-            AddRow(layout, "SharedVariables", _sharedVarsGrid);
+            AddRow(layout, "SharedVariables", Stretch(_sharedVarsGrid));
 
             // Arbitrary InputParameters beyond Target (FR-4.6). Same Key/Type/Value shape as
             // SharedVariables; the value cell format for EntityReference is "logical:guid".
             _inputParamsGrid = new DataGridView
             {
-                Width = 380,
                 Height = 110,
                 AllowUserToAddRows = true,
                 RowHeadersVisible = false,
@@ -560,20 +553,16 @@ namespace PluginDebugger
             inputTypeColumn.Items.AddRange(InputParameterValue.TypeNames.Cast<object>().ToArray());
             _inputParamsGrid.Columns.Add(inputTypeColumn);
             _inputParamsGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "value", HeaderText = "Value (EntityReference: logical:guid)" });
-            AddRow(layout, "InputParameters", _inputParamsGrid);
+            AddRow(layout, "InputParameters", Stretch(_inputParamsGrid));
 
             // ----- Visual Studio (§4.9) -----
             AddSectionHeader(layout, "Visual Studio (optional — manual attach also works)");
-            var vsPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
-            _vsCombo = new ComboBox { Width = 280, DropDownStyle = ComboBoxStyle.DropDownList };
+            _vsCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
             var refreshVsButton = new Button { Text = "Refresh", AutoSize = true };
             refreshVsButton.Click += (s, e) => RefreshVsInstances();
             var attachButton = new Button { Text = "Attach to XrmToolBox", AutoSize = true };
             attachButton.Click += OnAttachVs;
-            vsPanel.Controls.Add(_vsCombo);
-            vsPanel.Controls.Add(refreshVsButton);
-            vsPanel.Controls.Add(attachButton);
-            AddRow(layout, "Debugger", vsPanel);
+            AddRow(layout, "Debugger", BuildStretchRow(_vsCombo, refreshVsButton, attachButton));
 
             // Trigger + symbols
             var triggerPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
@@ -634,6 +623,49 @@ namespace PluginDebugger
             labelControl = new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 8, 3, 3) };
             layout.Controls.Add(labelControl);
             layout.Controls.Add(control);
+        }
+
+        /// <summary>
+        /// Anchors a field-column control Left+Right so it grows and shrinks with the panel
+        /// width when XrmToolBox is resized, instead of keeping its fixed design-time width.
+        /// </summary>
+        private static T Stretch<T>(T control) where T : Control
+        {
+            control.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            return control;
+        }
+
+        /// <summary>
+        /// Lays out a primary input that fills the available width followed by trailing controls
+        /// (buttons / a name label) that keep their natural size. The whole row anchors Left+Right
+        /// so the primary input adapts to the current panel width (requirement: fit available size).
+        /// </summary>
+        private static Control BuildStretchRow(Control main, params Control[] trailing)
+        {
+            var row = new TableLayoutPanel
+            {
+                Anchor = AnchorStyles.Left | AnchorStyles.Right,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1 + trailing.Length,
+                RowCount = 1,
+                Margin = new Padding(0)
+            };
+            row.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            main.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            main.Margin = new Padding(0, 1, 3, 1);
+            row.Controls.Add(main, 0, 0);
+
+            var column = 1;
+            foreach (var control in trailing)
+            {
+                row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+                control.Margin = new Padding(0, 1, 3, 1);
+                row.Controls.Add(control, column++, 0);
+            }
+            return row;
         }
 
         // ---- form-shape gating (§4.3 matrix, driven by FormShapeEngine) --------------------
@@ -808,14 +840,13 @@ namespace PluginDebugger
             }
         }
 
-        private async void OnHydrate(object sender, EventArgs e)
+        // Requires a connection: ExecuteMethod opens the connection selection dialog when
+        // disconnected and replays the hydrate once connected.
+        private void OnHydrate(object sender, EventArgs e) => ExecuteMethod(HydrateFromRecord);
+
+        private async void HydrateFromRecord()
         {
             var entityName = SelectedEntityName();
-            if (Service == null)
-            {
-                MessageBox.Show("Not connected: the tool has no IOrganizationService yet. Reconnect the environment.", "Hydrate", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
             if (_metadata == null)
             {
                 // Service is present but the metadata cache wasn't built — recover instead of blocking.
@@ -1213,7 +1244,11 @@ namespace PluginDebugger
             }
         }
 
-        private async void OnTrigger(object sender, EventArgs e)
+        // Requires a connection: ExecuteMethod opens the connection selection dialog when
+        // disconnected and replays the run once connected.
+        private void OnTrigger(object sender, EventArgs e) => ExecuteMethod(RunPlugin);
+
+        private async void RunPlugin()
         {
             if (!ValidateForRun(out var dllPath, out var typeInfo))
             {
@@ -1262,11 +1297,7 @@ namespace PluginDebugger
             dllPath = _assemblyPathBox.Text;
             typeInfo = _typeCombo.SelectedItem as PluginTypeInfo;
 
-            if (Service == null)
-            {
-                MessageBox.Show("Connect to an environment first.", "PluginXray", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
+            // Reached only via ExecuteMethod(RunPlugin), so a connection is already established.
             if (string.IsNullOrWhiteSpace(dllPath) || !File.Exists(dllPath))
             {
                 MessageBox.Show("Select a valid plugin assembly.", "PluginXray", MessageBoxButtons.OK, MessageBoxIcon.Warning);

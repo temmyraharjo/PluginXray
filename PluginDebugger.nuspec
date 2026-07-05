@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package>
+  <metadata>
+    <id>PluginDebugger</id>
+    <version>$version$</version>
+    <title>PluginXray</title>
+    <authors>Temmy Raharjo</authors>
+    <owners>Temmy Raharjo</owners>
+    <projectUrl>$projectUrl$</projectUrl>
+    <iconUrl>$iconUrl$</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Execute Dataverse plugins under a synthesized execution context with debugger attachment, without registering the plugin step first.</description>
+    <summary>Debug Dataverse plugins in XrmToolBox without registration.</summary>
+    <releaseNotes>$releaseNotes$</releaseNotes>
+    <tags>XrmToolBox PluginXray Dataverse Plugin Debugger</tags>
+    <dependencies>
+      <dependency id="XrmToolBox" version="$xrmToolBoxMinVersion$" />
+    </dependencies>
+  </metadata>
+
+  <files>
+    <file src="src\PluginDebugger\bin\Release\net48\PluginDebugger.dll" target="lib\net48\Plugins" />
+    <file src="src\PluginDebugger\bin\Release\net48\PluginDebugger.pdb" target="lib\net48\Plugins" />
+    <file src="src\PluginDebugger\bin\Release\net48\PluginDebugger.Runtime.dll" target="lib\net48\Plugins" />
+    <file src="src\PluginDebugger\bin\Release\net48\PluginDebugger.Runtime.pdb" target="lib\net48\Plugins" />
+  </files>
+</package>

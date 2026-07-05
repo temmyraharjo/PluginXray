@@ -55,6 +55,13 @@ namespace PluginDebugger.Controls
         /// <summary>The attributes currently in the editor.</summary>
         public IReadOnlyList<TypedAttribute> Attributes => _attributes;
 
+        /// <summary>
+        /// Optional hook the host sets (to <c>PluginControlBase.ExecuteMethod</c>) so that adding
+        /// or editing an attribute while disconnected opens XrmToolBox's connection selection
+        /// dialog and replays the action once connected, instead of erroring.
+        /// </summary>
+        public Action<Action> RunWithConnection { get; set; }
+
         public void SetContext(IOrganizationService service, MetadataCache metadata, string entityName)
         {
             _service = service;
@@ -79,7 +86,7 @@ namespace PluginDebugger.Controls
 
         private void AddAttribute()
         {
-            if (!EnsureReady())
+            if (RequestConnectionIfNeeded(AddAttribute) || !EnsureReady())
             {
                 return;
             }
@@ -95,7 +102,7 @@ namespace PluginDebugger.Controls
 
         private void EditSelected()
         {
-            if (!EnsureReady())
+            if (RequestConnectionIfNeeded(EditSelected) || !EnsureReady())
             {
                 return;
             }
@@ -169,12 +176,27 @@ namespace PluginDebugger.Controls
 
         // ---- helpers -----------------------------------------------------------------------
 
+        /// <summary>
+        /// When disconnected, hands <paramref name="retry"/> to the host's connection flow (which
+        /// opens the connection dialog and replays it once connected) and returns true so the
+        /// caller stops. Returns false when a connection is already present.
+        /// </summary>
+        private bool RequestConnectionIfNeeded(Action retry)
+        {
+            if (_service == null && RunWithConnection != null)
+            {
+                RunWithConnection(retry);
+                return true;
+            }
+            return false;
+        }
+
         private bool EnsureReady()
         {
             if (_service == null || _metadata == null || string.IsNullOrWhiteSpace(_entityName))
             {
                 MessageBox.Show(this,
-                    "Connect to an environment and enter a valid primary entity logical name first.",
+                    "Select a table (primary entity) first — attributes are metadata-driven.",
                     "Typed editor", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return false;
             }
