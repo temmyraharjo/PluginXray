@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>PluginDebugger.Runtime</AssemblyName>
+    <RootNamespace>PluginDebugger.Runtime</RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pinned so the Microsoft.Xrm.Sdk identity is byte-for-byte identical to the
+         version the UI project pulls in transitively (XrmToolBoxPackage depends on
+         >= 9.0.2.59). Identical identity is what lets SDK objects/MBRO proxies cross
+         the AppDomain boundary cleanly (see PluginExecutor assembly unification). -->
+    <PackageReference Include="Microsoft.CrmSdk.CoreAssemblies" Version="9.0.2.59" />
+    <!-- IWorkflowContext for custom workflow activity (code activity) support (§4.12). Host-provided
+         (Microsoft.Xrm.Sdk.Workflow.dll ships with XrmToolBox), so it is NOT deployed with the tool —
+         the child AppDomain resolves it from the host directory like the rest of the SDK. -->
+    <PackageReference Include="Microsoft.CrmSdk.Workflow" Version="9.0.2.59" />
+    <!-- Used only by AttributeJson (UI-side); the XrmToolBox host already ships Newtonsoft so
+         it also resolves inside the child AppDomain (host ApplicationBase). -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WorkflowInvoker / InArgument / OutArgument to host and run a CodeActivity (§4.12). Framework
+         assembly resolved from the GAC in every domain. -->
+    <Reference Include="System.Activities" />
+  </ItemGroup>
+
+</Project>

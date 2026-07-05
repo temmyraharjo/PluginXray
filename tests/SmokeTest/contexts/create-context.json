@@ -1,0 +1,187 @@
+{
+  "BusinessUnitId": "d8aa8675-25b1-eb11-8236-000d3ac912e3",
+  "CorrelationId": "d2053f9b-6108-45d5-99d1-05163024a8fe",
+  "Depth": 1,
+  "InitiatingUserAzureActiveDirectoryObjectId": "00000000-0000-0000-0000-000000000000",
+  "InitiatingUserId": "cbb18675-25b1-eb11-8236-000d3ac912e3",
+  "InputParameters": [
+    {
+      "key": "Target",
+      "value": {
+        "__type": "Entity:http://schemas.microsoft.com/xrm/2011/Contracts",
+        "Attributes": [
+          {
+            "key": "territorycode",
+            "value": {
+              "__type": "OptionSetValue:http://schemas.microsoft.com/xrm/2011/Contracts",
+              "Value": 1
+            }
+          },
+          {
+            "key": "owningbusinessunit",
+            "value": {
+              "__type": "EntityReference:http://schemas.microsoft.com/xrm/2011/Contracts",
+              "Id": "d8aa8675-25b1-eb11-8236-000d3ac912e3",
+              "KeyAttributes": [],
+              "LogicalName": "businessunit",
+              "Name": null,
+              "RowVersion": null
+            }
+          },
+          {
+            "key": "isprivate",
+            "value": false
+          },
+          {
+            "key": "createdon",
+            "value": "/Date(1623328083000)/"
+          },
+          {
+            "key": "statecode",
+            "value": {
+              "__type": "OptionSetValue:http://schemas.microsoft.com/xrm/2011/Contracts",
+              "Value": 0
+            }
+          },
+          {
+            "key": "ownerid",
+            "value": {
+              "__type": "EntityReference:http://schemas.microsoft.com/xrm/2011/Contracts",
+              "Id": "cbb18675-25b1-eb11-8236-000d3ac912e3",
+              "KeyAttributes": [],
+              "LogicalName": "systemuser",
+              "Name": null,
+              "RowVersion": null
+            }
+          },
+          {
+            "key": "name",
+            "value": "Temmy"
+          },
+          {
+            "key": "emailaddress1",
+            "value": "temmy.raharjo@outlook.com"
+          },
+          {
+            "key": "statuscode",
+            "value": {
+              "__type": "OptionSetValue:http://schemas.microsoft.com/xrm/2011/Contracts",
+              "Value": 1
+            }
+          },
+          {
+            "key": "modifiedonbehalfby",
+            "value": null
+          },
+          {
+            "key": "accountid",
+            "value": "5677734c-e7c9-eb11-bacc-000d3aa2b8f0"
+          },
+          {
+            "key": "exchangerate",
+            "value": 1
+          }
+        ],
+        "EntityState": null,
+        "FormattedValues": [
+          {
+            "key": "territorycode",
+            "value": "Default Value"
+          },
+          {
+            "key": "statecode",
+            "value": "Active"
+          }
+        ],
+        "Id": "5677734c-e7c9-eb11-bacc-000d3aa2b8f0",
+        "KeyAttributes": [],
+        "LogicalName": "account",
+        "RelatedEntities": [],
+        "RowVersion": null
+      }
+    }
+  ],
+  "IsExecutingOffline": false,
+  "IsInTransaction": true,
+  "IsOfflinePlayback": false,
+  "IsolationMode": 1,
+  "MessageName": "Create",
+  "Mode": 0,
+  "OperationCreatedOn": "/Date(1623328085203)/",
+  "OperationId": "0dfe0cff-0bc3-4997-953b-e62ba9a800f6",
+  "OrganizationId": "e7a95a8c-862b-41d9-adcf-b1c035098804",
+  "OrganizationName": "unqe7a95a8c862b41d9adcfb1c035098",
+  "OutputParameters": [
+    {
+      "key": "id",
+      "value": "5677734c-e7c9-eb11-bacc-000d3aa2b8f0"
+    }
+  ],
+  "OwningExtension": {
+    "Id": "ccdc065b-95c9-eb11-bacc-000d3aa2b8f0",
+    "KeyAttributes": [],
+    "LogicalName": "sdkmessageprocessingstep",
+    "Name": "test: Update of account",
+    "RowVersion": null
+  },
+  "ParentContext": {
+    "MessageName": "Create",
+    "Stage": 30,
+    "InputParameters": [
+      {
+        "key": "Target",
+        "value": {
+          "__type": "Entity:http://schemas.microsoft.com/xrm/2011/Contracts",
+          "Attributes": [
+            {
+              "key": "name",
+              "value": "Temmy"
+            }
+          ],
+          "Id": "5677734c-e7c9-eb11-bacc-000d3aa2b8f0",
+          "LogicalName": "account"
+        }
+      },
+      {
+        "key": "x-ms-app-name",
+        "value": "new_insurgoapp"
+      }
+    ],
+    "ParentContext": null,
+    "SharedVariables": [
+      {
+        "key": "ChangedEntityTypes",
+        "value": [
+          {
+            "__type": "KeyValuePairOfstringstring:#System.Collections.Generic",
+            "key": "account",
+            "value": "Update"
+          }
+        ]
+      }
+    ]
+  },
+  "PostEntityImages": [],
+  "PreEntityImages": [],
+  "PrimaryEntityId": "5677734c-e7c9-eb11-bacc-000d3aa2b8f0",
+  "PrimaryEntityName": "account",
+  "RequestId": "0dfe0cff-0bc3-4997-953b-e62ba9a800f6",
+  "SecondaryEntityName": "none",
+  "SharedVariables": [
+    {
+      "key": "IsAutoTransact",
+      "value": true
+    },
+    {
+      "key": "x-ms-app-name",
+      "value": "new_insurgoapp"
+    },
+    {
+      "key": "DefaultsAddedFlag",
+      "value": true
+    }
+  ],
+  "Stage": 40,
+  "UserAzureActiveDirectoryObjectId": "00000000-0000-0000-0000-000000000000",
+  "UserId": "cbb18675-25b1-eb11-8236-000d3ac912e3"
+}

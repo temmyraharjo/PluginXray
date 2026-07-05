@@ -1,0 +1,46 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+out/
+artifacts/
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+*.userprefs
+
+# IDE folders/settings
+.vs/
+.vscode/
+.idea/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+
+# Test and coverage outputs
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+coverage/
+
+# Logs and diagnostics
+*.log
+*.tmp
+*.cache
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local agent/tool metadata
+.claude/
+
+# Repo-local docs/scripts to keep untracked
+MANUAL_TESTING.md
+manual_testing.md
+requirements.md
+deploy.ps1

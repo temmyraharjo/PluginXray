@@ -1,0 +1,79 @@
+{
+  "BusinessUnitId": "d8aa8675-25b1-eb11-8236-000d3ac912e3",
+  "CorrelationId": "db3d5da1-a6ed-4981-b761-f0fad152f5c0",
+  "Depth": 1,
+  "InitiatingUserAzureActiveDirectoryObjectId": "00000000-0000-0000-0000-000000000000",
+  "InitiatingUserId": "cbb18675-25b1-eb11-8236-000d3ac912e3",
+  "InputParameters": [
+    {
+      "key": "Target",
+      "value": {
+        "__type": "EntityReference:http://schemas.microsoft.com/xrm/2011/Contracts",
+        "Id": "be69f3f3-74c8-eb11-bacc-000d3aa2b8f0",
+        "KeyAttributes": [],
+        "LogicalName": "account",
+        "Name": null,
+        "RowVersion": null
+      }
+    }
+  ],
+  "IsExecutingOffline": false,
+  "IsInTransaction": true,
+  "IsOfflinePlayback": false,
+  "IsolationMode": 1,
+  "MessageName": "Delete",
+  "Mode": 0,
+  "OperationCreatedOn": "/Date(1623326203276)/",
+  "OperationId": "317ce56d-3ba1-4fba-91f3-7cda27e890df",
+  "OrganizationId": "e7a95a8c-862b-41d9-adcf-b1c035098804",
+  "OrganizationName": "unqe7a95a8c862b41d9adcfb1c035098",
+  "OutputParameters": [],
+  "OwningExtension": {
+    "Id": "ccdc065b-95c9-eb11-bacc-000d3aa2b8f0",
+    "KeyAttributes": [],
+    "LogicalName": "sdkmessageprocessingstep",
+    "Name": "test: Update of account",
+    "RowVersion": null
+  },
+  "ParentContext": {
+    "MessageName": "Delete",
+    "Stage": 30,
+    "InputParameters": [
+      {
+        "key": "Target",
+        "value": {
+          "__type": "EntityReference:http://schemas.microsoft.com/xrm/2011/Contracts",
+          "Id": "be69f3f3-74c8-eb11-bacc-000d3aa2b8f0",
+          "KeyAttributes": [],
+          "LogicalName": "account",
+          "Name": null,
+          "RowVersion": null
+        }
+      },
+      {
+        "key": "x-ms-app-name",
+        "value": "new_insurgoapp"
+      }
+    ],
+    "ParentContext": null
+  },
+  "PostEntityImages": [],
+  "PreEntityImages": [],
+  "PrimaryEntityId": "be69f3f3-74c8-eb11-bacc-000d3aa2b8f0",
+  "PrimaryEntityName": "account",
+  "RequestId": "317ce56d-3ba1-4fba-91f3-7cda27e890df",
+  "SecondaryEntityName": "none",
+  "SharedVariables": [
+    {
+      "key": "IsAutoTransact",
+      "value": true
+    },
+    {
+      "key": "x-ms-app-name",
+      "value": "new_insurgoapp"
+    }
+  ],
+  "Stage": 40,
+  "UserAzureActiveDirectoryObjectId": "00000000-0000-0000-0000-000000000000",
+  "UserId": "27a496d8-2bc1-4089-900f-0cb6cd5bdb4a"
+}

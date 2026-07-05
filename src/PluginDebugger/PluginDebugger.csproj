@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>PluginDebugger</AssemblyName>
+    <RootNamespace>PluginDebugger</RootNamespace>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <!-- XrmToolBox shows the tool's author from the assembly Company attribute. -->
+    <Company>Temmy Raharjo</Company>
+    <Authors>Temmy Raharjo</Authors>
+    <Product>PluginXray</Product>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <DebugType>portable</DebugType>
+    <!-- This is an XrmToolBox plugin; the host supplies its own copy of the
+         framework/host assemblies at runtime. We only need our own dll + Runtime.dll
+         to be deployed. Keep build output for now; deployment trimming comes later. -->
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="XrmToolBoxPackage" Version="1.2025.10.74" />
+    <!-- XrmToolBoxPackage's bundled XrmToolBox.Extensibility.dll references
+         McTools.Xrm.Connection 1.2025.9.64, but its dependency floor understates that.
+         Pin the connection package explicitly so the assembly versions line up. -->
+    <PackageReference Include="MscrmTools.Xrm.Connection" Version="1.2025.9.64" />
+    <PackageReference Include="Microsoft.CrmSdk.CoreAssemblies" Version="9.0.2.59" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.ComponentModel.Composition" />
+    <!-- Required for late-bound (dynamic) EnvDTE automation in VisualStudioAttacher. -->
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PluginDebugger.Runtime\PluginDebugger.Runtime.csproj" />
+  </ItemGroup>
+
+</Project>
