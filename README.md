@@ -94,8 +94,10 @@ needs a restart.
 - **Message + Stage form-shape engine** — the resolved shape drives the Target editor, image panels,
   and `OutputParameters["id"]`; impossible combinations are disabled, not merely warned.
 - **Metadata-driven typed attribute/image editor** — type-appropriate inputs, polymorphic-lookup
-  target chooser, record pickers, multiple keyed pre/post images, and typed-envelope JSON
-  import/export (plain values rejected for ambiguous columns).
+  target chooser, record pickers, multiple keyed pre/post images, and CRM SDK-shaped JSON
+  import/export (`EntityReference {Id, LogicalName, Name}`, `Money {Value}`, `OptionSetValue {Value}`;
+  shape-incompatible values rejected against metadata). A per-entity **FormattedValues** editor
+  (manual or JSON) so plugins can read `entity.GetFormattedAttributeValue(...)`.
 - **Full execution-context import** — paste a serialized `IExecutionContext` (the platform's
   DataContract-JSON shape from PRT profiler / trace logs) to hydrate the entire form in one action.
 - **Custom workflow activity (code activity) support** — same load/attach/iterate loop, with

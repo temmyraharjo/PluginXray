@@ -19,6 +19,9 @@ namespace PluginDebugger.Controls
     {
         private readonly DataGridView _grid;
         private readonly List<TypedAttribute> _attributes = new List<TypedAttribute>();
+        private readonly Dictionary<string, string> _formattedValues =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Button _formattedButton;
 
         private IOrganizationService _service;
         private MetadataCache _metadata;
@@ -31,6 +34,7 @@ namespace PluginDebugger.Controls
             AddButton(toolbar, "Edit…", (s, e) => EditSelected());
             AddButton(toolbar, "Remove", (s, e) => RemoveSelected());
             AddButton(toolbar, "Edit as JSON…", (s, e) => EditJson());
+            _formattedButton = AddButton(toolbar, "Formatted values…", (s, e) => EditFormattedValues());
 
             _grid = new DataGridView
             {
@@ -55,6 +59,9 @@ namespace PluginDebugger.Controls
         /// <summary>The attributes currently in the editor.</summary>
         public IReadOnlyList<TypedAttribute> Attributes => _attributes;
 
+        /// <summary>The entity's FormattedValues currently in the editor (requirements FR-5.7).</summary>
+        public IReadOnlyDictionary<string, string> FormattedValues => _formattedValues;
+
         /// <summary>
         /// Optional hook the host sets (to <c>PluginControlBase.ExecuteMethod</c>) so that adding
         /// or editing an attribute while disconnected opens XrmToolBox's connection selection
@@ -72,6 +79,7 @@ namespace PluginDebugger.Controls
         public void Clear()
         {
             _attributes.Clear();
+            _formattedValues.Clear();
             RefreshGrid();
         }
 
@@ -80,6 +88,20 @@ namespace PluginDebugger.Controls
             _attributes.Clear();
             _attributes.AddRange(attributes);
             RefreshGrid();
+        }
+
+        /// <summary>Replaces the FormattedValues currently in the editor (requirements FR-5.7).</summary>
+        public void SetFormattedValues(IEnumerable<KeyValuePair<string, string>> formattedValues)
+        {
+            _formattedValues.Clear();
+            if (formattedValues != null)
+            {
+                foreach (var pair in formattedValues)
+                {
+                    _formattedValues[pair.Key] = pair.Value;
+                }
+            }
+            UpdateFormattedButton();
         }
 
         // ---- actions -----------------------------------------------------------------------
@@ -155,6 +177,31 @@ namespace PluginDebugger.Controls
                     }
                 }
             }
+        }
+
+        private void EditFormattedValues()
+        {
+            using (var dialog = new FormattedValuesDialog(_formattedValues))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                _formattedValues.Clear();
+                foreach (var pair in dialog.Values)
+                {
+                    _formattedValues[pair.Key] = pair.Value;
+                }
+                UpdateFormattedButton();
+            }
+        }
+
+        private void UpdateFormattedButton()
+        {
+            _formattedButton.Text = _formattedValues.Count > 0
+                ? $"Formatted values ({_formattedValues.Count})…"
+                : "Formatted values…";
         }
 
         private AttributeEditorKind? ResolveKind(string attributeName)
@@ -241,11 +288,12 @@ namespace PluginDebugger.Controls
             }
         }
 
-        private static void AddButton(Control parent, string text, EventHandler onClick)
+        private static Button AddButton(Control parent, string text, EventHandler onClick)
         {
             var button = new Button { Text = text, AutoSize = true };
             button.Click += onClick;
             parent.Controls.Add(button);
+            return button;
         }
     }
 }

@@ -30,6 +30,7 @@ namespace PluginDebugger.Dialogs
         // Lookup state (set by the record picker).
         private Guid _lookupId;
         private string _lookupEntity;
+        private string _lookupName;
 
         public TypedAttribute Result { get; private set; }
 
@@ -178,6 +179,7 @@ namespace PluginDebugger.Dialogs
             _valueReader = null;
             _lookupId = Guid.Empty;
             _lookupEntity = null;
+            _lookupName = null;
 
             if (attr == null)
             {
@@ -277,13 +279,14 @@ namespace PluginDebugger.Dialogs
                     {
                         _lookupId = existingId;
                         _lookupEntity = existing.LookupEntity;
+                        _lookupName = existing.LookupName;
                         display.Text = $"{_lookupEntity}: {_lookupId}";
                     }
                     pick.Click += (s, e) => PickLookup(attr, display);
                     _valuePanel.Controls.Add(display);
                     _valuePanel.Controls.Add(pick);
                     _valueReader = () => _lookupEntity != null && _lookupId != Guid.Empty
-                        ? new TypedAttribute(name, kind, _lookupId, _lookupEntity)
+                        ? new TypedAttribute(name, kind, _lookupId, _lookupEntity, _lookupName)
                         : throw new FormatException("Pick a record for the lookup.");
                     break;
                 }
@@ -305,6 +308,7 @@ namespace PluginDebugger.Dialogs
                 {
                     _lookupEntity = entity;
                     _lookupId = picker.SelectedId;
+                    _lookupName = picker.SelectedName;
                     display.Text = $"{entity}: {picker.SelectedName} ({picker.SelectedId})";
                 }
             }

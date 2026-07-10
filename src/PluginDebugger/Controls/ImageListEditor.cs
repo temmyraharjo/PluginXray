@@ -10,12 +10,16 @@ using Label = System.Windows.Forms.Label;
 
 namespace PluginDebugger.Controls
 {
-    /// <summary>One pre/post entity image with its key and typed attributes.</summary>
+    /// <summary>One pre/post entity image with its key, typed attributes and FormattedValues.</summary>
     internal sealed class ImageEntry
     {
         public bool IsPreImage { get; set; }
         public string Key { get; set; }
         public List<TypedAttribute> Attributes { get; set; } = new List<TypedAttribute>();
+
+        /// <summary>The image entity's FormattedValues (requirements FR-5.7).</summary>
+        public Dictionary<string, string> FormattedValues { get; set; } =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -233,6 +237,7 @@ namespace PluginDebugger.Controls
                 _editor = new TypedAttributeEditor { Dock = DockStyle.Fill };
                 _editor.SetContext(service, metadata, entityName);
                 _editor.SetAttributes(entry.Attributes);
+                _editor.SetFormattedValues(entry.FormattedValues);
 
                 var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, Height = 40, Padding = new Padding(6) };
                 var ok = new Button { Text = "OK", AutoSize = true };
@@ -259,6 +264,7 @@ namespace PluginDebugger.Controls
                 _entry.IsPreImage = (_typeCombo.SelectedItem as string) == "PreImage";
                 _entry.Key = _keyBox.Text.Trim();
                 _entry.Attributes = _editor.Attributes.ToList();
+                _entry.FormattedValues = _editor.FormattedValues.ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
                 DialogResult = DialogResult.OK;
                 Close();
             }

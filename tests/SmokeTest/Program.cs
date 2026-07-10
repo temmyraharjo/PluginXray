@@ -179,7 +179,7 @@ namespace SmokeTest
 
         private static void CheckTypedAttributeJson()
         {
-            Console.WriteLine("\n== Typed attribute mapper + JSON envelope (§4.5) ==");
+            Console.WriteLine("\n== Typed attribute mapper + CRM SDK-shape JSON (§4.5) ==");
 
             Check("Integer -> WholeNumber (unambiguous)",
                 AttributeTypeMapper.FromTypeCode(AttributeTypeCode.Integer) == AttributeEditorKind.WholeNumber
@@ -202,7 +202,7 @@ namespace SmokeTest
                 new TypedAttribute("revenue", AttributeEditorKind.Money, 1234.56m),
                 new TypedAttribute("statuscode", AttributeEditorKind.OptionSet, 2),
                 new TypedAttribute("new_choices", AttributeEditorKind.MultiSelectOptionSet, new System.Collections.Generic.List<int> { 1, 3, 5 }),
-                new TypedAttribute("primarycontactid", AttributeEditorKind.Lookup, Guid.Parse("11111111-1111-1111-1111-111111111111"), "contact"),
+                new TypedAttribute("primarycontactid", AttributeEditorKind.Lookup, Guid.Parse("11111111-1111-1111-1111-111111111111"), "contact", "Jane Doe"),
                 new TypedAttribute("new_when", AttributeEditorKind.DateTime, new DateTime(2026, 6, 28, 9, 30, 0, DateTimeKind.Utc)),
             };
 
@@ -215,20 +215,74 @@ namespace SmokeTest
             Check("round-trip import succeeded", imported.Success);
             Check("round-trip preserved all attributes", imported.Attributes.Count == original.Length);
             var lookup = imported.Attributes.FirstOrDefault(a => a.LogicalName == "primarycontactid");
-            Check("lookup envelope kept entity+id", lookup != null && lookup.LookupEntity == "contact"
-                && (Guid)lookup.Value == Guid.Parse("11111111-1111-1111-1111-111111111111"));
+            Check("EntityReference shape kept entity+id+name", lookup != null && lookup.LookupEntity == "contact"
+                && (Guid)lookup.Value == Guid.Parse("11111111-1111-1111-1111-111111111111") && lookup.LookupName == "Jane Doe"
+                && lookup.ToSdkValue() is Microsoft.Xrm.Sdk.EntityReference er && er.Name == "Jane Doe");
             var money = imported.Attributes.FirstOrDefault(a => a.LogicalName == "revenue");
             Check("money round-trips to Money SDK value", money != null
                 && money.ToSdkValue() is Microsoft.Xrm.Sdk.Money m && m.Value == 1234.56m);
 
-            // Plain value on an ambiguous column must be rejected, not guessed.
+            // Exported shapes are the CRM SDK objects, not the old {"t":..} envelope.
+            var shapeCheck = Newtonsoft.Json.Linq.JObject.Parse(json);
+            Check("lookup exports as {Id,LogicalName,Name}",
+                (string)shapeCheck["primarycontactid"]["LogicalName"] == "contact"
+                && (string)shapeCheck["primarycontactid"]["Name"] == "Jane Doe");
+            Check("money exports as {Value}", shapeCheck["revenue"]["Value"] != null);
+            Check("optionset exports as {Value}", (int)shapeCheck["statuscode"]["Value"] == 2);
+            Check("multi-select exports as [{Value}]",
+                shapeCheck["new_choices"] is Newtonsoft.Json.Linq.JArray ms && (int)ms[0]["Value"] == 1);
+
+            // A bare scalar for an object-shaped column is a shape mismatch, rejected not guessed.
             var bad = AttributeJson.Import("{\"statuscode\": 2}", n => n == "statuscode" ? AttributeEditorKind.OptionSet : (AttributeEditorKind?)null);
-            Check("plain value on ambiguous column rejected", !bad.Success && bad.Errors.Count == 1);
+            Check("bare scalar on object-shaped column rejected", !bad.Success && bad.Errors.Count == 1);
+
+            // A wrong object shape (money object on a lookup column) is rejected.
+            var wrongShape = AttributeJson.Import("{\"primarycontactid\":{\"Value\":5}}",
+                n => n == "primarycontactid" ? AttributeEditorKind.Lookup : (AttributeEditorKind?)null);
+            Check("wrong object shape rejected", !wrongShape.Success && wrongShape.Errors.Count == 1);
 
             // Plain unambiguous values accepted.
             var good = AttributeJson.Import("{\"name\":\"x\",\"creditonhold\":false,\"numberofemployees\":7}",
                 n => n == "name" ? AttributeEditorKind.String : n == "creditonhold" ? AttributeEditorKind.Boolean : AttributeEditorKind.WholeNumber);
             Check("plain unambiguous values accepted", good.Success && good.Attributes.Count == 3);
+
+            // No-metadata Money vs OptionSet resolves via a __type hint (arbitrary InputParameters, FR-4.6).
+            var hinted = AttributeJson.Import("{\"p\":{\"Value\":5,\"__type\":\"Money\"}}", n => null);
+            Check("__type hint resolves Money without metadata",
+                hinted.Success && hinted.Attributes[0].Kind == AttributeEditorKind.Money);
+
+            CheckFormattedValues();
+        }
+
+        private static void CheckFormattedValues()
+        {
+            Console.WriteLine("\n== FormattedValues editor (§4.5 / FR-5.7) ==");
+
+            // JSON round-trip: plain string map.
+            var exported = FormattedValueJson.Export(new System.Collections.Generic.Dictionary<string, string>
+            {
+                ["statuscode"] = "Active",
+                ["revenue"] = "$1,234.56"
+            });
+            var reimported = FormattedValueJson.Import(exported);
+            Check("formatted values round-trip through JSON",
+                reimported.Success && reimported.Values["statuscode"] == "Active" && reimported.Values["revenue"] == "$1,234.56");
+
+            // A non-string JSON value is rejected, not coerced.
+            var badFv = FormattedValueJson.Import("{\"statuscode\":2}");
+            Check("non-string formatted value rejected", !badFv.Success && badFv.Errors.Count == 1);
+
+            // Attached to the built entity so the plugin can read GetFormattedAttributeValue.
+            var attrs = new[] { new TypedAttribute("statuscode", AttributeEditorKind.OptionSet, 1) };
+            var entity = TypedAttribute.ToEntity("account", attrs, reimported.Values);
+            Check("ToEntity sets FormattedValues on the entity",
+                entity.FormattedValues.Contains("statuscode") && entity.FormattedValues["statuscode"] == "Active"
+                && entity["statuscode"] is Microsoft.Xrm.Sdk.OptionSetValue);
+
+            // HydrationMapper reads them back off a retrieved record.
+            var fromRecord = HydrationMapper.FormattedValuesFrom(entity);
+            Check("HydrationMapper.FormattedValuesFrom copies the collection",
+                fromRecord.Count == 2 && fromRecord["statuscode"] == "Active" && fromRecord["revenue"] == "$1,234.56");
         }
 
         private static void CheckSharedVariables()
@@ -321,6 +375,9 @@ namespace SmokeTest
             Check("create: bare guid string -> Guid", target["accountid"] is Guid);
             Check("create: null attribute skipped", !target.Contains("modifiedonbehalfby"));
             Check("create: FormattedValues not imported as attributes", !target.Contains("statecode") || target["statecode"] is OptionSetValue);
+            Check("create: FormattedValues imported into the collection (FR-5.7)",
+                target.FormattedValues.Contains("statecode") && target.FormattedValues["statecode"] == "Active"
+                && target.FormattedValues["territorycode"] == "Default Value");
             Check("create: SharedVariables parsed (scalars)",
                 create.SharedVariables.Count == 3 && create.SharedVariables.Any(s => s.Key == "IsAutoTransact" && (bool)s.Value));
             Check("create: no non-Target InputParameters at top level", create.InputParameters.Count == 0);

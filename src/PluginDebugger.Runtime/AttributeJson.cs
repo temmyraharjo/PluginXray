@@ -18,12 +18,15 @@ namespace PluginDebugger.Runtime
     /// <summary>
     /// Import / export of typed attribute values as JSON (requirements §4.5 / OD-3).
     ///
-    /// Unambiguous scalars (string, bool, whole number) are plain JSON values. Ambiguous types
-    /// (optionset vs int, lookup, money, datetime, decimal/double, guid) use a typed envelope,
-    /// e.g. <c>{"statuscode":{"t":"optionset","v":2}}</c> or
-    /// <c>{"primarycontactid":{"t":"lookup","entity":"contact","v":"&lt;guid&gt;"}}</c>.
-    /// Export produces exactly this shape so it round-trips, and a plain value supplied for an
-    /// ambiguous column is REJECTED with a clear message rather than guessed.
+    /// Values mirror the CRM/Dataverse SDK object shapes (<c>Microsoft.Xrm.Sdk</c>): a lookup is
+    /// <c>{"primarycontactid":{"Id":"&lt;guid&gt;","LogicalName":"contact","Name":"Jane"}}</c>,
+    /// money is <c>{"revenue":{"Value":12.5}}</c>, a choice is <c>{"statuscode":{"Value":2}}</c>,
+    /// a multi-select is an array of <c>{"Value":n}</c>, a datetime/guid is an ISO/guid string, and
+    /// plain scalars (string, bool, number) stay plain. The object shape identifies the type
+    /// <em>family</em>; table metadata (<paramref name="kindResolver"/>) pins the exact type where
+    /// a shape is shared (e.g. Money vs OptionSetValue, int vs decimal). Export produces exactly
+    /// these shapes so a value round-trips, and a value whose shape is incompatible with the
+    /// column's metadata kind is REJECTED with a clear message rather than guessed.
     /// </summary>
     public static class AttributeJson
     {
@@ -80,71 +83,75 @@ namespace PluginDebugger.Runtime
 
         private static JToken ToToken(TypedAttribute attr)
         {
-            if (!AttributeTypeMapper.IsAmbiguous(attr.Kind))
-            {
-                switch (attr.Kind)
-                {
-                    case AttributeEditorKind.Boolean:
-                        return new JValue(Convert.ToBoolean(attr.Value));
-                    case AttributeEditorKind.WholeNumber:
-                        return new JValue(Convert.ToInt32(attr.Value));
-                    case AttributeEditorKind.BigInt:
-                        return new JValue(Convert.ToInt64(attr.Value));
-                    default:
-                        return new JValue(Convert.ToString(attr.Value, CultureInfo.InvariantCulture));
-                }
-            }
-
-            var envelope = new JObject { ["t"] = AttributeTypeMapper.EnvelopeToken(attr.Kind) };
             switch (attr.Kind)
             {
-                case AttributeEditorKind.Money:
+                case AttributeEditorKind.Boolean:
+                    return new JValue(Convert.ToBoolean(attr.Value, CultureInfo.InvariantCulture));
+                case AttributeEditorKind.WholeNumber:
+                    return new JValue(Convert.ToInt32(attr.Value, CultureInfo.InvariantCulture));
+                case AttributeEditorKind.BigInt:
+                    return new JValue(Convert.ToInt64(attr.Value, CultureInfo.InvariantCulture));
                 case AttributeEditorKind.Decimal:
-                    envelope["v"] = Convert.ToDecimal(attr.Value, CultureInfo.InvariantCulture);
-                    break;
+                    return new JValue(Convert.ToDecimal(attr.Value, CultureInfo.InvariantCulture));
                 case AttributeEditorKind.Double:
-                    envelope["v"] = Convert.ToDouble(attr.Value, CultureInfo.InvariantCulture);
-                    break;
-                case AttributeEditorKind.OptionSet:
-                    envelope["v"] = Convert.ToInt32(attr.Value, CultureInfo.InvariantCulture);
-                    break;
-                case AttributeEditorKind.MultiSelectOptionSet:
-                    envelope["v"] = new JArray(AsInts(attr.Value).Cast<object>().ToArray());
-                    break;
-                case AttributeEditorKind.DateTime:
-                    envelope["v"] = Convert.ToDateTime(attr.Value, CultureInfo.InvariantCulture).ToString("o", CultureInfo.InvariantCulture);
-                    break;
+                    return new JValue(Convert.ToDouble(attr.Value, CultureInfo.InvariantCulture));
                 case AttributeEditorKind.Guid:
-                    envelope["v"] = attr.Value.ToString();
-                    break;
+                    return new JValue(attr.Value.ToString());
+                case AttributeEditorKind.DateTime:
+                    return new JValue(Convert.ToDateTime(attr.Value, CultureInfo.InvariantCulture).ToString("o", CultureInfo.InvariantCulture));
+
+                // ---- CRM/Dataverse SDK object shapes ----
+                case AttributeEditorKind.Money:
+                    return new JObject { ["Value"] = Convert.ToDecimal(attr.Value, CultureInfo.InvariantCulture) };
+                case AttributeEditorKind.OptionSet:
+                    return new JObject { ["Value"] = Convert.ToInt32(attr.Value, CultureInfo.InvariantCulture) };
+                case AttributeEditorKind.MultiSelectOptionSet:
+                    return new JArray(AsInts(attr.Value).Select(v => (JToken)new JObject { ["Value"] = v }).ToArray());
                 case AttributeEditorKind.Lookup:
-                    envelope["entity"] = attr.LookupEntity;
-                    envelope["v"] = attr.Value.ToString();
-                    break;
+                    var reference = new JObject
+                    {
+                        ["Id"] = attr.Value.ToString(),
+                        ["LogicalName"] = attr.LookupEntity
+                    };
+                    if (!string.IsNullOrEmpty(attr.LookupName))
+                    {
+                        reference["Name"] = attr.LookupName;
+                    }
+                    return reference;
+
+                default: // String / Memo
+                    return new JValue(Convert.ToString(attr.Value, CultureInfo.InvariantCulture));
             }
-            return envelope;
         }
 
         // ---- import helpers ----------------------------------------------------------------
 
         private static TypedAttribute ParseProperty(string name, JToken token, Func<string, AttributeEditorKind?> kindResolver)
         {
-            // Typed envelope: an object carrying a "t" discriminator.
-            if (token is JObject obj && obj["t"] != null)
+            var resolved = kindResolver?.Invoke(name);
+
+            // Array => OptionSetValueCollection (multi-select), each element a {"Value":n} object.
+            if (token is JArray array)
             {
-                var kind = AttributeTypeMapper.KindFromEnvelopeToken(obj["t"].Value<string>());
-                return FromEnvelope(name, kind, obj);
+                RequireCompatible(name, resolved, AttributeEditorKind.MultiSelectOptionSet);
+                return new TypedAttribute(name, AttributeEditorKind.MultiSelectOptionSet, ReadOptionArray(array));
             }
 
-            // Plain scalar: only acceptable if the column is an unambiguous kind.
-            var resolved = kindResolver?.Invoke(name);
+            // Object => a reference (Id + LogicalName) or a value object (Money / OptionSetValue).
+            if (token is JObject obj)
+            {
+                return ParseObject(name, obj, resolved);
+            }
+
+            // Plain scalar (string / bool / number). A shape-based type (Money, OptionSet, lookup,
+            // multi-select) supplied as a bare scalar is a shape mismatch and is rejected below.
             if (resolved.HasValue)
             {
-                if (AttributeTypeMapper.IsAmbiguous(resolved.Value))
+                if (IsObjectShaped(resolved.Value))
                 {
                     throw new FormatException(
-                        $"is '{resolved.Value}', which is ambiguous — supply a typed envelope, e.g. " +
-                        $"{{\"t\":\"{AttributeTypeMapper.EnvelopeToken(resolved.Value)}\",\"v\":...}}.");
+                        $"is '{resolved.Value}', which expects a CRM object shape (e.g. " +
+                        $"{ExampleShape(resolved.Value)}), not a bare {token.Type} value.");
                 }
                 return FromPlainScalar(name, resolved.Value, token);
             }
@@ -153,32 +160,137 @@ namespace PluginDebugger.Runtime
             return FromUnknownScalar(name, token);
         }
 
-        private static TypedAttribute FromEnvelope(string name, AttributeEditorKind kind, JObject obj)
+        /// <summary>
+        /// Parses a JSON object into a lookup (<c>EntityReference</c>) or a value object
+        /// (<c>Money</c> / <c>OptionSetValue</c>). An optional <c>__type</c> hint disambiguates the
+        /// Money-vs-OptionSet case where no metadata is available (arbitrary InputParameters, FR-4.6).
+        /// </summary>
+        private static TypedAttribute ParseObject(string name, JObject obj, AttributeEditorKind? resolved)
         {
-            var v = obj["v"];
+            var id = Property(obj, "Id");
+            var logicalName = Property(obj, "LogicalName");
+            if (id != null || logicalName != null)
+            {
+                RequireCompatible(name, resolved, AttributeEditorKind.Lookup);
+                if (id == null || logicalName == null)
+                {
+                    throw new FormatException("an EntityReference requires both \"Id\" and \"LogicalName\".");
+                }
+                var entity = logicalName.Value<string>();
+                var refName = Property(obj, "Name")?.Value<string>();
+                return new TypedAttribute(name, AttributeEditorKind.Lookup, Guid.Parse(id.Value<string>()), entity, refName);
+            }
+
+            var value = Property(obj, "Value");
+            if (value == null)
+            {
+                throw new FormatException(
+                    "unrecognized object shape — expected an EntityReference (\"Id\"+\"LogicalName\") " +
+                    "or a value object (\"Value\").");
+            }
+
+            // {"Value":n} is a Money or an OptionSetValue only. Metadata decides which; failing that
+            // a __type hint; failing that, an integer defaults to OptionSetValue and a fractional
+            // number to Money. A scalar-shaped column (decimal/double/int/…) is a shape mismatch.
+            var kind = resolved ?? HintedValueKind(obj) ?? DefaultValueKind(value);
             switch (kind)
             {
                 case AttributeEditorKind.Money:
-                case AttributeEditorKind.Decimal:
-                    return new TypedAttribute(name, kind, v.Value<decimal>());
-                case AttributeEditorKind.Double:
-                    return new TypedAttribute(name, kind, v.Value<double>());
+                    return new TypedAttribute(name, AttributeEditorKind.Money, value.Value<decimal>());
                 case AttributeEditorKind.OptionSet:
-                    return new TypedAttribute(name, kind, v.Value<int>());
-                case AttributeEditorKind.MultiSelectOptionSet:
-                    return new TypedAttribute(name, kind, v.Values<int>().ToList());
-                case AttributeEditorKind.DateTime:
-                    return new TypedAttribute(name, kind, DateTime.Parse(v.Value<string>(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
-                case AttributeEditorKind.Guid:
-                    return new TypedAttribute(name, kind, Guid.Parse(v.Value<string>()));
-                case AttributeEditorKind.Lookup:
-                    var entity = obj["entity"]?.Value<string>()
-                                 ?? throw new FormatException("lookup envelope requires an \"entity\" field.");
-                    return new TypedAttribute(name, kind, Guid.Parse(v.Value<string>()), entity);
+                    return new TypedAttribute(name, AttributeEditorKind.OptionSet, value.Value<int>());
                 default:
-                    throw new FormatException($"'{kind}' is not a valid envelope kind.");
+                    throw new FormatException(
+                        $"a {{\"Value\":…}} object is a Money or OptionSetValue, but the column is '{kind}'.");
             }
         }
+
+        private static AttributeEditorKind? HintedValueKind(JObject obj)
+        {
+            var hint = Property(obj, "__type")?.Value<string>();
+            if (string.IsNullOrEmpty(hint))
+            {
+                return null;
+            }
+            // Accept the platform-style "Money:http://…" form as well as a bare "Money".
+            var colon = hint.IndexOf(':');
+            if (colon > 0)
+            {
+                hint = hint.Substring(0, colon);
+            }
+            switch (hint)
+            {
+                case "Money": return AttributeEditorKind.Money;
+                case "OptionSetValue": return AttributeEditorKind.OptionSet;
+                default: return null;
+            }
+        }
+
+        private static AttributeEditorKind DefaultValueKind(JToken value) =>
+            value.Type == JTokenType.Integer ? AttributeEditorKind.OptionSet : AttributeEditorKind.Money;
+
+        private static List<int> ReadOptionArray(JArray array)
+        {
+            var values = new List<int>();
+            foreach (var element in array)
+            {
+                if (element is JObject o && Property(o, "Value") is JToken v)
+                {
+                    values.Add(v.Value<int>());
+                }
+                else if (element.Type == JTokenType.Integer)
+                {
+                    values.Add(element.Value<int>()); // tolerate a bare [1,2,3] for multi-select
+                }
+                else
+                {
+                    throw new FormatException("multi-select entries must be {\"Value\":n} objects.");
+                }
+            }
+            return values;
+        }
+
+        /// <summary>Guards that the JSON shape matches the column's metadata kind, when known.</summary>
+        private static void RequireCompatible(string name, AttributeEditorKind? resolved, AttributeEditorKind shapeKind)
+        {
+            if (resolved.HasValue && resolved.Value != shapeKind)
+            {
+                throw new FormatException(
+                    $"is '{resolved.Value}', but the JSON shape is a '{shapeKind}' " +
+                    $"({ExampleShape(shapeKind)}) — shapes must match.");
+            }
+        }
+
+        /// <summary>Kinds whose CRM shape is a JSON object/array rather than a bare scalar.</summary>
+        private static bool IsObjectShaped(AttributeEditorKind kind)
+        {
+            switch (kind)
+            {
+                case AttributeEditorKind.Money:
+                case AttributeEditorKind.OptionSet:
+                case AttributeEditorKind.MultiSelectOptionSet:
+                case AttributeEditorKind.Lookup:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static string ExampleShape(AttributeEditorKind kind)
+        {
+            switch (kind)
+            {
+                case AttributeEditorKind.Money: return "{\"Value\":12.5}";
+                case AttributeEditorKind.OptionSet: return "{\"Value\":2}";
+                case AttributeEditorKind.MultiSelectOptionSet: return "[{\"Value\":1},{\"Value\":2}]";
+                case AttributeEditorKind.Lookup: return "{\"Id\":\"<guid>\",\"LogicalName\":\"contact\"}";
+                default: return kind.ToString();
+            }
+        }
+
+        /// <summary>Case-insensitive property lookup so "id"/"Id"/"logicalName" all resolve.</summary>
+        private static JToken Property(JObject obj, string name) =>
+            obj.GetValue(name, StringComparison.OrdinalIgnoreCase);
 
         private static TypedAttribute FromPlainScalar(string name, AttributeEditorKind kind, JToken token)
         {
@@ -190,6 +302,14 @@ namespace PluginDebugger.Runtime
                     return new TypedAttribute(name, kind, token.Value<int>());
                 case AttributeEditorKind.BigInt:
                     return new TypedAttribute(name, kind, token.Value<long>());
+                case AttributeEditorKind.Decimal:
+                    return new TypedAttribute(name, kind, token.Value<decimal>());
+                case AttributeEditorKind.Double:
+                    return new TypedAttribute(name, kind, token.Value<double>());
+                case AttributeEditorKind.DateTime:
+                    return new TypedAttribute(name, kind, DateTime.Parse(token.Value<string>(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
+                case AttributeEditorKind.Guid:
+                    return new TypedAttribute(name, kind, Guid.Parse(token.Value<string>()));
                 default:
                     return new TypedAttribute(name, kind, token.Value<string>());
             }

@@ -348,7 +348,21 @@ namespace PluginDebugger.Runtime
                 }
             }
 
-            // FormattedValues, KeyAttributes, RelatedEntities, EntityState, RowVersion are ignored (FR-11.5).
+            // FormattedValues: imported as display-only strings (FR-5.7 / FR-11.5), not as attributes.
+            if (obj["FormattedValues"] is JArray formatted)
+            {
+                foreach (var pair in formatted)
+                {
+                    var key = (string)pair["key"];
+                    var value = pair["value"];
+                    if (!string.IsNullOrEmpty(key) && value != null && value.Type == JTokenType.String)
+                    {
+                        entity.FormattedValues[key] = (string)value;
+                    }
+                }
+            }
+
+            // KeyAttributes, RelatedEntities, EntityState, RowVersion are ignored (FR-11.5).
             return entity;
         }
 

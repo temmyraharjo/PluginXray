@@ -900,6 +900,10 @@ namespace PluginDebugger
                     if (dialog.ShowDialog(this) == DialogResult.OK)
                     {
                         _targetEditor.SetAttributes(dialog.SelectedAttributes);
+
+                        // Carry the record's FormattedValues for the attributes the user kept (FR-5.7).
+                        var selected = new HashSet<string>(dialog.SelectedAttributes.Select(a => a.LogicalName), StringComparer.OrdinalIgnoreCase);
+                        _targetEditor.SetFormattedValues(HydrationMapper.FormattedValuesFrom(record).Where(p => selected.Contains(p.Key)));
                         AppendLog(LogCategory.Info, $"Hydrated {dialog.SelectedAttributes.Count} attribute(s) from {entityName} {recordId}.");
                     }
                 }
@@ -1019,6 +1023,7 @@ namespace PluginDebugger
                 if (ic.TargetEntity != null)
                 {
                     _targetEditor.SetAttributes(HydrationMapper.FromEntity(ic.TargetEntity));
+                    _targetEditor.SetFormattedValues(HydrationMapper.FormattedValuesFrom(ic.TargetEntity));
                     if (ic.TargetEntity.Id != Guid.Empty)
                     {
                         _hydratedPrimaryId = ic.TargetEntity.Id;
@@ -1108,7 +1113,8 @@ namespace PluginDebugger
                 {
                     IsPreImage = image.IsPreImage,
                     Key = image.Key,
-                    Attributes = HydrationMapper.FromEntity(image.Entity)
+                    Attributes = HydrationMapper.FromEntity(image.Entity),
+                    FormattedValues = HydrationMapper.FormattedValuesFrom(image.Entity)
                 });
             }
             _imageEditor.SetEntries(entries);
@@ -1521,7 +1527,7 @@ namespace PluginDebugger
             // API — carries no Target at all; leave TargetKind.None so no "Target" is injected.
             else if (!string.IsNullOrWhiteSpace(entityName) || _targetEditor.Attributes.Count > 0)
             {
-                var target = TypedAttribute.ToEntity(entityName, _targetEditor.Attributes);
+                var target = TypedAttribute.ToEntity(entityName, _targetEditor.Attributes, _targetEditor.FormattedValues);
 
                 // For Update against a hydrated record, the Target carries the record id.
                 if (shape.Message == "Update" && _hydratedPrimaryId.HasValue)
@@ -1553,7 +1559,7 @@ namespace PluginDebugger
                 var dto = new ImageDto
                 {
                     Key = image.Key,
-                    EntityXml = SdkXml.Serialize(TypedAttribute.ToEntity(entityName, image.Attributes), typeof(Entity))
+                    EntityXml = SdkXml.Serialize(TypedAttribute.ToEntity(entityName, image.Attributes, image.FormattedValues), typeof(Entity))
                 };
                 (image.IsPreImage ? context.PreImages : context.PostImages).Add(dto);
             }

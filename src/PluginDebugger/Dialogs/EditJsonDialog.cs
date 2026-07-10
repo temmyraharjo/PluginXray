@@ -8,9 +8,9 @@ namespace PluginDebugger.Dialogs
 {
     /// <summary>
     /// An editable JSON view of an attribute set (requirements FR-5.6). Pre-filled with the
-    /// current attributes (typed-envelope format), it lets the user add/edit attributes as JSON
-    /// and apply them back — either replacing or merging. Parsing is validated against table
-    /// metadata; on error the messages are shown inline and the text is kept.
+    /// current attributes (CRM/Dataverse SDK object-shape format), it lets the user add/edit
+    /// attributes as JSON and apply them back — either replacing or merging. Parsing is validated
+    /// against table metadata; on error the messages are shown inline and the text is kept.
     /// </summary>
     internal sealed class EditJsonDialog : Form
     {
@@ -42,9 +42,9 @@ namespace PluginDebugger.Dialogs
             {
                 AutoSize = true,
                 Margin = new Padding(0, 0, 0, 6),
-                Text = "Typed-envelope JSON. Unambiguous scalars are plain (\"name\":\"x\", \"done\":true, \"count\":5);\n" +
-                       "ambiguous types use an envelope, e.g. {\"statuscode\":{\"t\":\"optionset\",\"v\":2}}, " +
-                       "{\"primarycontactid\":{\"t\":\"lookup\",\"entity\":\"contact\",\"v\":\"<guid>\"}}."
+                Text = "CRM SDK-shaped JSON. Scalars are plain (\"name\":\"x\", \"done\":true, \"count\":5);\n" +
+                       "money/choice are {\"revenue\":{\"Value\":12.5}}, {\"statuscode\":{\"Value\":2}}, and a lookup is\n" +
+                       "{\"primarycontactid\":{\"Id\":\"<guid>\",\"LogicalName\":\"contact\",\"Name\":\"Jane\"}}."
             };
 
             _textBox = new TextBox

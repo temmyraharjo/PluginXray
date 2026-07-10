@@ -11,9 +11,9 @@
     <Company>Temmy Raharjo</Company>
     <Authors>Temmy Raharjo</Authors>
     <Product>PluginXray</Product>
-    <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.0.1</Version>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.0.1.0</FileVersion>
     <DebugType>portable</DebugType>
     <!-- This is an XrmToolBox plugin; the host supplies its own copy of the
          framework/host assemblies at runtime. We only need our own dll + Runtime.dll

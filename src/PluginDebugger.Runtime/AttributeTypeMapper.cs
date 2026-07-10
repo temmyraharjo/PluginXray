@@ -25,8 +25,10 @@ namespace PluginDebugger.Runtime
 
     /// <summary>
     /// Maps Dataverse attribute metadata to an <see cref="AttributeEditorKind"/>, and answers
-    /// whether a kind is "ambiguous" for JSON purposes (FR-5.5 / OD-3): unambiguous scalars may
-    /// be written as plain JSON; ambiguous kinds require a typed envelope.
+    /// whether a kind is "ambiguous" for JSON purposes (FR-5.5 / OD-3): a genuinely unambiguous
+    /// scalar can be read from a bare JSON value alone, whereas an ambiguous kind (e.g. a bare
+    /// number could be int / decimal / double) needs table metadata to pin its exact type. See
+    /// <see cref="AttributeJson"/> for the CRM/Dataverse SDK object shapes used on the wire.
     /// </summary>
     public static class AttributeTypeMapper
     {
@@ -81,9 +83,10 @@ namespace PluginDebugger.Runtime
         }
 
         /// <summary>
-        /// Ambiguous kinds require a JSON typed envelope; the rest may be written as a plain
-        /// scalar. A plain number could be an int, an optionset, a money or a decimal — so only
-        /// the genuinely unambiguous scalars are allowed bare.
+        /// Ambiguous kinds need table metadata to pin their exact type from a shared JSON
+        /// representation; the rest can be read from a bare JSON value alone. A plain number could
+        /// be an int, a decimal or a double — so only the genuinely unambiguous scalars are
+        /// resolvable without metadata.
         /// </summary>
         public static bool IsAmbiguous(AttributeEditorKind kind)
         {
@@ -97,39 +100,6 @@ namespace PluginDebugger.Runtime
                     return false;
                 default:
                     return true;
-            }
-        }
-
-        /// <summary>The short token used in the JSON typed envelope ("t" field).</summary>
-        public static string EnvelopeToken(AttributeEditorKind kind)
-        {
-            switch (kind)
-            {
-                case AttributeEditorKind.Decimal: return "decimal";
-                case AttributeEditorKind.Double: return "double";
-                case AttributeEditorKind.Money: return "money";
-                case AttributeEditorKind.DateTime: return "datetime";
-                case AttributeEditorKind.OptionSet: return "optionset";
-                case AttributeEditorKind.MultiSelectOptionSet: return "multiselect";
-                case AttributeEditorKind.Guid: return "guid";
-                case AttributeEditorKind.Lookup: return "lookup";
-                default: throw new ArgumentOutOfRangeException(nameof(kind), $"{kind} is not an enveloped kind.");
-            }
-        }
-
-        public static AttributeEditorKind KindFromEnvelopeToken(string token)
-        {
-            switch (token)
-            {
-                case "decimal": return AttributeEditorKind.Decimal;
-                case "double": return AttributeEditorKind.Double;
-                case "money": return AttributeEditorKind.Money;
-                case "datetime": return AttributeEditorKind.DateTime;
-                case "optionset": return AttributeEditorKind.OptionSet;
-                case "multiselect": return AttributeEditorKind.MultiSelectOptionSet;
-                case "guid": return AttributeEditorKind.Guid;
-                case "lookup": return AttributeEditorKind.Lookup;
-                default: throw new FormatException($"Unknown type envelope token '{token}'.");
             }
         }
     }

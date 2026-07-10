@@ -32,6 +32,23 @@ namespace PluginDebugger.Runtime
             return result;
         }
 
+        /// <summary>
+        /// Copies an entity's <c>FormattedValues</c> into a plain string map for the FormattedValues
+        /// editor (requirements FR-5.7). Empty when the entity is null or carries none.
+        /// </summary>
+        public static Dictionary<string, string> FormattedValuesFrom(Entity entity)
+        {
+            var result = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+            if (entity?.FormattedValues != null)
+            {
+                foreach (var pair in entity.FormattedValues)
+                {
+                    result[pair.Key] = pair.Value;
+                }
+            }
+            return result;
+        }
+
         /// <summary>Maps one boxed SDK value to a <see cref="TypedAttribute"/>, or null if unsupported.</summary>
         public static TypedAttribute FromValue(string name, object value)
         {

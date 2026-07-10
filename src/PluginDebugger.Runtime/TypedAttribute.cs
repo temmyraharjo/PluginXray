@@ -18,12 +18,13 @@ namespace PluginDebugger.Runtime
     /// </summary>
     public sealed class TypedAttribute
     {
-        public TypedAttribute(string logicalName, AttributeEditorKind kind, object value, string lookupEntity = null)
+        public TypedAttribute(string logicalName, AttributeEditorKind kind, object value, string lookupEntity = null, string lookupName = null)
         {
             LogicalName = logicalName;
             Kind = kind;
             Value = value;
             LookupEntity = lookupEntity;
+            LookupName = lookupName;
         }
 
         public string LogicalName { get; }
@@ -32,6 +33,12 @@ namespace PluginDebugger.Runtime
 
         /// <summary>For <see cref="AttributeEditorKind.Lookup"/>: the chosen (possibly polymorphic) target entity.</summary>
         public string LookupEntity { get; }
+
+        /// <summary>
+        /// For <see cref="AttributeEditorKind.Lookup"/>: the optional display name of the referenced
+        /// record (the CRM <c>EntityReference.Name</c>). Display-only — not required, not written back.
+        /// </summary>
+        public string LookupName { get; }
 
         /// <summary>The SDK object to place in an <c>Entity</c>'s attribute bag.</summary>
         public object ToSdkValue()
@@ -63,7 +70,7 @@ namespace PluginDebugger.Runtime
                     return Value is Guid g ? g : Guid.Parse(Convert.ToString(Value, CultureInfo.InvariantCulture));
                 case AttributeEditorKind.Lookup:
                     var id = Value is Guid lg ? lg : Guid.Parse(Convert.ToString(Value, CultureInfo.InvariantCulture));
-                    return new EntityReference(LookupEntity, id);
+                    return new EntityReference(LookupEntity, id) { Name = LookupName };
                 default:
                     throw new InvalidOperationException($"Unsupported attribute kind '{Kind}'.");
             }
@@ -77,7 +84,9 @@ namespace PluginDebugger.Runtime
                 case AttributeEditorKind.MultiSelectOptionSet:
                     return "[" + string.Join(",", AsIntList(Value)) + "]";
                 case AttributeEditorKind.Lookup:
-                    return $"{LookupEntity}:{Value}";
+                    return string.IsNullOrEmpty(LookupName)
+                        ? $"{LookupEntity}:{Value}"
+                        : $"{LookupEntity}:{Value} ({LookupName})";
                 case AttributeEditorKind.DateTime:
                     return Value is DateTime dt ? dt.ToString("o", CultureInfo.InvariantCulture) : Convert.ToString(Value);
                 default:
@@ -103,10 +112,34 @@ namespace PluginDebugger.Runtime
         /// <summary>Builds an SDK <c>Entity</c> from a set of typed attributes.</summary>
         public static Entity ToEntity(string logicalName, IEnumerable<TypedAttribute> attributes)
         {
+            return ToEntity(logicalName, attributes, null);
+        }
+
+        /// <summary>
+        /// Builds an SDK <c>Entity</c> from typed attributes plus optional <c>FormattedValues</c>
+        /// (requirements FR-5.7): plain display strings keyed by attribute logical name, set on the
+        /// entity so a plugin can read <c>entity.GetFormattedAttributeValue("&lt;attr&gt;")</c>.
+        /// </summary>
+        public static Entity ToEntity(string logicalName, IEnumerable<TypedAttribute> attributes,
+            IEnumerable<KeyValuePair<string, string>> formattedValues)
+        {
             var entity = new Entity(logicalName);
-            foreach (var attr in attributes)
+            if (attributes != null)
             {
-                entity[attr.LogicalName] = attr.ToSdkValue();
+                foreach (var attr in attributes)
+                {
+                    entity[attr.LogicalName] = attr.ToSdkValue();
+                }
+            }
+            if (formattedValues != null)
+            {
+                foreach (var pair in formattedValues)
+                {
+                    if (pair.Value != null)
+                    {
+                        entity.FormattedValues[pair.Key] = pair.Value;
+                    }
+                }
             }
             return entity;
         }
